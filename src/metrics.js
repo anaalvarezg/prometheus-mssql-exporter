@@ -210,6 +210,56 @@ const mssql_database_filesize = {
   },
 };
 
+const mssql_database_total_data_filesize = {
+  metrics: {
+    mssql_database_total_data_filesize: new client.Gauge({
+      name: "mssql_database_total_log_filesize",
+      help: "Total physical sizes of data files used by database in KB",
+      labelNames: ["database"],
+    }),
+  },
+  query: `SELECT DB_NAME(database_id) AS database_name, SUM (size * CAST(8 AS BIGINT)) total_log_size_kb FROM sys.master_files WHERE type=0 GROUP BY database_id`,
+  collect: (rows, metrics) => {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const database = row[0].value;      
+      const mssql_database_total_data_filesize = row[1].value;
+      metricsLog(
+        "Fetched size of row files for database ",
+        database,
+        "size",
+        mssql_database_total_data_filesize
+      );
+      metrics.mssql_database_total_data_filesize.set({ database }, mssql_database_total_data_filesize);
+    }
+  },
+};
+
+const mssql_database_total_log_filesize = {
+  metrics: {
+    mssql_database_total_log_filesize: new client.Gauge({
+      name: "mssql_database_total_log_filesize",
+      help: "Total physical sizes of log files used by database in KB",
+      labelNames: ["database"],
+    }),
+  },
+  query: `SELECT DB_NAME(database_id) AS database_name, SUM (size * CAST(8 AS BIGINT)) total_log_size_kb FROM sys.master_files WHERE type=1 GROUP BY database_id`,
+  collect: (rows, metrics) => {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const database = row[0].value;      
+      const mssql_database_total_log_filesize = row[1].value;
+      metricsLog(
+        "Fetched size of log files for database ",
+        database,
+        "size",
+        mssql_database_total_log_filesize
+      );
+      metrics.mssql_database_total_log_filesize.set({ database }, mssql_database_total_log_filesize);
+    }
+  },
+};
+
 const mssql_buffer_manager = {
   metrics: {
     mssql_page_read_total: new client.Gauge({ name: "mssql_page_read_total", help: "Page reads/sec" }),
