@@ -213,7 +213,7 @@ const mssql_database_filesize = {
 const mssql_database_total_data_filesize = {
   metrics: {
     mssql_database_total_data_filesize: new client.Gauge({
-      name: "mssql_database_total_log_filesize",
+      name: "mssql_database_total_data_filesize",
       help: "Total physical sizes of data files used by database in KB",
       labelNames: ["database"],
     }),
