@@ -47,7 +47,7 @@ const mssql_instance_local_time = {
 
 const mssql_connections = {
   metrics: {
-    mssql_connections: new client.Gauge({ name: "mssql_connections", help: "Number of active connections", labelNames: ["database", "state"] }),
+    mssql_connections: new client.Gauge({ name: "mssql_connections", help: "Number of connections", labelNames: ["database", "state"] }),
   },
   query: `SELECT DB_NAME(sP.dbid)
         , COUNT(sP.spid)
@@ -61,6 +61,36 @@ GROUP BY DB_NAME(sP.dbid)`,
       metricsLog("Fetched number of connections for database", database, mssql_connections);
       metrics.mssql_connections.set({ database, state: "current" }, mssql_connections);
     }
+  },
+};
+
+const mssql_active_connections = {
+  metrics: {
+    mssql_active_connections: new client.Gauge({ name: "mssql_active_connections", help: "Number of active connections" }),
+  },
+  query: `SELECT COUNT(SDES.session_id) AS active_sessions  
+  FROM sys.dm_exec_sessions SDES 
+  INNER JOIN sys.dm_exec_connections SDEC on SDES.session_id=SDEC.session_id  
+  WHERE SDES.status IN ('RUNNING', 'RUNNABLE', 'SUSPENDED')`,
+  collect: (rows, metrics) => {
+    const mssql_active_conn = rows[0][0].value;
+    metricsLog("Fetched active sessions", mssql_active_conn);
+    metrics.mssql_active_connections.set(mssql_active_conn);
+  },
+};
+
+const mssql_idle_connections = {
+  metrics: {
+    mssql_idle_connections: new client.Gauge({ name: "mssql_idle_connections", help: "Number of idle connections" }),
+  },
+  query: `SELECT COUNT(SDES.session_id) AS idle_sessions  
+  FROM sys.dm_exec_sessions SDES 
+  INNER JOIN sys.dm_exec_connections SDEC on SDES.session_id=SDEC.session_id  
+  WHERE SDES.status NOT IN ('RUNNING', 'RUNNABLE', 'SUSPENDED')`,
+  collect: (rows, metrics) => {
+    const mssql_idle_conn = rows[0][0].value;
+    metricsLog("Fetched active sessions", mssql_idle_conn);
+    metrics.mssql_idle_connections.set(mssql_idle_conn);
   },
 };
 
@@ -438,11 +468,132 @@ FROM sys.dm_os_sys_memory`,
   },
 };
 
+const mssql_cpu_process_percentage = {
+  metrics: {
+    mssql_cpu_server_percentage: new client.Gauge({ name: "mssql_cpu_server_percentage", help: "Percentage of server cpu utilization" }),
+    mssql_cpu_sql_percentage: new client.Gauge({ name: "mssql_cpu_sql_percentage", help: "Percentage of sql cpu utilization" }),
+  },
+  query: `declare
+	@WmiServiceLocator int,
+	@WmiService int,
+	@CounterCollection int,
+	@CounterObject int,
+	@PercentProcessorTime int,
+	@PercentSQLProcessorTime int,
+	@ProcessId int,
+	@LogicalCPU int,
+	@ProcessCPUQuery varchar(200)
+
+SELECT @LogicalCPU= cpu_count FROM sys.dm_os_sys_info
+
+SELECT @ProcessId = process_id FROM sys.dm_server_services WHERE ServiceName LIKE 'SQL Server (%'
+
+SELECT @ProcessCPUQuery = 'select * from win32_PerfFormattedData_PerfProc_Process where IDProcess='+CAST(@ProcessId AS VARCHAR)
+
+exec sp_OACreate 'WbemScripting.SWbemLocator', @WmiServiceLocator output, 5
+	
+exec sp_OAMethod @WmiServiceLocator, 'ConnectServer',@WmiService output,'.','root\\cimv2'
+
+exec sp_OAMethod @WmiService,
+	'Get',
+	@CounterObject output,
+	'Win32_PerfFormattedData_PerfOS_Processor="_Total"'
+exec sp_OAGetProperty @CounterObject,
+	'PercentProcessorTime',
+	@PercentProcessorTime output
+
+exec sp_OAMethod @WmiService,
+	'execQuery',
+	@CounterCollection output,
+	@ProcessCPUQuery		
+exec sp_OAMethod @CounterCollection,
+	'ItemIndex(0)',
+	@CounterObject output				
+exec sp_OAGetProperty @CounterObject,
+	'PercentProcessorTime',
+	@PercentSQLProcessorTime output
+
+select  
+  @PercentProcessorTime as PercentProcessorTime,
+  @PercentSQLProcessorTime/@LogicalCPU as PercentSQLProcessorTime
+		
+exec sp_OADestroy @CounterObject
+exec sp_OADestroy @CounterCollection
+exec sp_OADestroy @WmiService
+exec sp_OADestroy @WmiServiceLocator`,
+  collect: (rows, metrics) => {
+    const mssql_cpu_server_percentage = rows[0][0].value;
+    const mssql_cpu_sql_percentage = rows[0][1].value;   
+    metricsLog(
+      "Fetched system cpu information",
+      "Server CPU",
+      mssql_cpu_server_percentage,
+      "SQL CPU",
+      mssql_cpu_sql_percentage
+    ); 
+    metrics.mssql_cpu_server_percentage.set(mssql_cpu_server_percentage);
+    metrics.mssql_cpu_sql_percentage.set(mssql_cpu_sql_percentage);
+  },
+};
+
+const mssql_time_spent = {
+  metrics: {
+    mssql_time_spent: new client.Gauge({
+      name: "mssql_time_spent",
+      help: "The total time spent executing SQL statements during the specified time period",
+    }),
+  },
+  query: `SELECT
+SUM(total_elapsed_time /1000.0 )/60 AS total_execution_time
+FROM  sys.dm_exec_sessions
+where is_user_process=1
+and  login_time > dateadd(hh, -1, getdate())`,
+  collect: (rows, metrics) => {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const mssql_time_spent = row[0].value;
+      metricsLog("Total time spent executing SQL statements during the specified time period", mssql_time_spent);
+      metrics.mssql_time_spent.set(mssql_time_spent);
+    }
+  },
+};
+
+const mssql_wait_type = {
+  metrics: {
+    mssql_wait_type: new client.Gauge({
+      name: "mssql_wait_type",
+      help: "Wait type",
+      labelNames: ["type"],
+    }),
+  },
+  query: `SELECT top(10)  wait_type, wait_time_ms/1000 AS wait_time_sec
+  FROM sys.dm_os_wait_stats
+  ORDER BY wait_time_ms
+  DESC`,
+  collect: (rows, metrics) => {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const type = row[0].value;
+      const mssql_wait_type = row[1].value;
+      metricsLog(
+        "Fetched time of wait type ",
+        type,
+        "time",
+        mssql_wait_type
+      );
+      metrics.mssql_wait_type.set({ type }, mssql_wait_type);
+    }
+  },
+};
+
+
 const entries = {
   mssql_up,
   mssql_product_version,
   mssql_instance_local_time,
   mssql_connections,
+  mssql_active_connections,
+  mssql_idle_connections,  
   mssql_client_connections,
   mssql_deadlocks,
   mssql_user_errors,
@@ -450,12 +601,17 @@ const entries = {
   mssql_database_state,
   mssql_log_growths,
   mssql_database_filesize,
+  mssql_database_total_data_filesize, 
+  mssql_database_total_log_filesize, 
   mssql_buffer_manager,
   mssql_io_stall,
   mssql_batch_requests,
   mssql_transactions,
   mssql_os_process_memory,
   mssql_os_sys_memory,
+  mssql_cpu_process_percentage,
+  mssql_time_spent,
+  mssql_wait_type,
 };
 
 module.exports = {

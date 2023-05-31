@@ -26,7 +26,7 @@ let config = {
       rowCollectionOnRequestCompletion: true,
     },
   },
-  port: parseInt(process.env["EXPOSE"]) || 4000,
+  port: parseInt(process.env["EXPOSE"]) || 5000,
 };
 
 if (!config.connect.server) {
