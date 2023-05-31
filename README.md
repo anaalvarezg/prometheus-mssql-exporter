@@ -35,9 +35,9 @@ Please feel free to submit other interesting metrics to include.
 
 ## Usage
 
-`docker run -e SERVER=192.168.56.101 -e USERNAME=SA -e PASSWORD=qkD4x3yy -e DEBUG=app -p 4000:4000 --name prometheus-mssql-exporter awaragi/prometheus-mssql-exporter`
+`docker run -e SERVER=192.168.56.101 -e USERNAME=SA -e PASSWORD=qkD4x3yy -e DEBUG=app -p 5000:5000 --name prometheus-mssql-exporter awaragi/prometheus-mssql-exporter`
 
-The image supports the following environments and exposes port 4000
+The image supports the following environments and exposes port 5000
 
 - **SERVER** server ip or dns name (required)
 - **PORT** server port (optional defaults to 1433)
@@ -64,7 +64,7 @@ Probably your SQL Server is working as named instance. For named instances the T
 
 Raised in [issue #20](https://github.com/awaragi/prometheus-mssql-exporter/issues/20)
 
-Each container should use its own docker port forward (e.g. -p 4001:4000 and -p 4002:4000)
+Each container should use its own docker port forward (e.g. -p 5001:5000 and -p 5002:5000)
 
 ### What Grafana dashboard can I use
 
@@ -106,7 +106,7 @@ npm run metrics
 - PASSWORD: sql user password
 - ENCRYPT: force [encrypt](https://docs.microsoft.com/en-us/dotnet/api/system.data.sqlclient.sqlconnectionstringbuilder.encrypt?view=dotnet-plat-ext-6.0) setting (optional defaults to true)
 - TRUST_SERVER_CERTIFICATE: sets [trustServerCertificate](https://docs.microsoft.com/en-us/dotnet/api/system.data.sqlclient.sqlconnectionstringbuilder.trustservercertificate?view=dotnet-plat-ext-6.0) setting (optional defaults to true)
-- EXPOSE: webserver port (defaults to 4000)
+- EXPOSE: webserver port (defaults to 5000)
 - DEBUG: verbose logging
   - app for application logging
   - metrics for metrics executions logging
@@ -145,7 +145,7 @@ npm run docker:run
 Use curl or wget to fetch the metrics from launched web application.
 
 ```shell
-curl http://localhost:4000/metrics
+curl http://localhost:5000/metrics
 ```
 
 ### E2E Test with Expectations

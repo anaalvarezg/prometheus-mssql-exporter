@@ -14,7 +14,7 @@ function parse(text) {
 
 describe("E2E Test", function () {
   it("Fetch all metrics and ensure that all expected are present", async function () {
-    const data = await request.get("http://localhost:4000/metrics");
+    const data = await request.get("http://localhost:5000/metrics");
     expect(data.status).toBe(200);
     let text = data.text;
     const lines = parse(text);
